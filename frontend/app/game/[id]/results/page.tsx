@@ -145,45 +145,57 @@ function buildMessage(results: GameResults): string {
   const sorted = [...results.players].sort((a, b) => b.profit_loss_inr - a.profit_loss_inr);
   const banker = results.players.find((p) => p.is_banker);
   const settlements = results.players.filter((p) => !p.is_banker && p.profit_loss_inr > 0);
-  const medals = ["🥇", "🥈", "🥉"];
 
-  // Result rows — padded with spaces for rough alignment
+  const D = `━━━━━━━━━━━━━━━━━━━━━`;
+
+  // Result rows using plain text — no emojis at all
   const resultLines = sorted.map((p, i) => {
     const pl = p.profit_loss_inr;
-    const medal = pl > 0 && i < 3 ? medals[i] : "  ";
-    const plStr =
-      pl > 0 ? `+₹${pl.toFixed(0)} ✅` : pl < 0 ? `-₹${Math.abs(pl).toFixed(0)} ❌` : `₹0 —`;
-    const crown = p.is_banker ? " 👑" : "";
-    return `${medal} *${p.name}*${crown}   ${plStr}`;
+    const rank = `${i + 1}.`;
+    const name = p.is_banker ? `${p.name} (Banker)` : p.name;
+    const plStr = pl > 0 ? `+Rs.${pl.toFixed(0)}  WIN` : pl < 0 ? `-Rs.${Math.abs(pl).toFixed(0)}  LOSS` : `Rs.0`;
+    return `  ${rank}  *${name}*\n       ${plStr}`;
   });
 
-  // Settlement rows
-  const settlementLines =
-    settlements.length > 0 && banker
-      ? [
-          ``,
-          `💸 *Settlement*`,
-          ...settlements.map(
-            (p) => `${banker.name} pays *${p.name}* ₹${p.profit_loss_inr.toFixed(0)}`
-          ),
-        ]
-      : [];
-
-  const divider = `━━━━━━━━━━━━━━━━━`;
+  // Settlement section
+  let settlementBlock: string[];
+  if (settlements.length > 0 && banker) {
+    settlementBlock = [
+      ``,
+      D,
+      `*SETTLEMENT*`,
+      D,
+      ``,
+      ...settlements.map((p) => `  *${banker.name}* pays *${p.name}*\n  Amount: Rs.${p.profit_loss_inr.toFixed(0)}`),
+    ];
+  } else {
+    settlementBlock = [
+      ``,
+      D,
+      `*SETTLEMENT*`,
+      D,
+      `  No payouts — banker covers losses`,
+    ];
+  }
 
   return [
-    `♠ *POKER NIGHT — GAME #${results.game_id}*`,
+    D,
+    `*POKER NIGHT — GAME #${results.game_id}*`,
+    D,
     ``,
-    `Buy-in: ₹${results.buy_in_amount}  |  ${results.chips_per_buyin} chips`,
-    divider,
-    `*🏆 FINAL RESULTS*`,
-    divider,
+    `  Buy-in :  Rs.${results.buy_in_amount}`,
+    `  Chips  :  ${results.chips_per_buyin} per buy-in`,
+    ``,
+    D,
+    `*FINAL RESULTS*`,
+    D,
     ``,
     ...resultLines,
-    ...settlementLines,
+    ...settlementBlock,
     ``,
-    divider,
-    `_Poker Night_ ♠`,
+    D,
+    `_Sent via Poker Night_`,
+    D,
   ].join("\n");
 }
 
