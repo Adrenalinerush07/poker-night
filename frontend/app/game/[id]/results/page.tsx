@@ -143,21 +143,48 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
 
 function buildMessage(results: GameResults): string {
   const sorted = [...results.players].sort((a, b) => b.profit_loss_inr - a.profit_loss_inr);
-  const lines = [
-    `🃏 *Poker Night — Game #${results.game_id}*`,
-    `💰 Buy-in: ₹${results.buy_in_amount} · ${results.chips_per_buyin} chips`,
+  const banker = results.players.find((p) => p.is_banker);
+  const settlements = results.players.filter((p) => !p.is_banker && p.profit_loss_inr > 0);
+  const medals = ["🥇", "🥈", "🥉"];
+
+  // Result rows — padded with spaces for rough alignment
+  const resultLines = sorted.map((p, i) => {
+    const pl = p.profit_loss_inr;
+    const medal = pl > 0 && i < 3 ? medals[i] : "  ";
+    const plStr =
+      pl > 0 ? `+₹${pl.toFixed(0)} ✅` : pl < 0 ? `-₹${Math.abs(pl).toFixed(0)} ❌` : `₹0 —`;
+    const crown = p.is_banker ? " 👑" : "";
+    return `${medal} *${p.name}*${crown}   ${plStr}`;
+  });
+
+  // Settlement rows
+  const settlementLines =
+    settlements.length > 0 && banker
+      ? [
+          ``,
+          `💸 *Settlement*`,
+          ...settlements.map(
+            (p) => `${banker.name} pays *${p.name}* ₹${p.profit_loss_inr.toFixed(0)}`
+          ),
+        ]
+      : [];
+
+  const divider = `━━━━━━━━━━━━━━━━━`;
+
+  return [
+    `♠ *POKER NIGHT — GAME #${results.game_id}*`,
     ``,
-    `*Final Results:*`,
-    ...sorted.map((p) => {
-      const pl = p.profit_loss_inr;
-      const icon = pl > 0 ? "📈" : pl < 0 ? "📉" : "➖";
-      const banker = p.is_banker ? " 👑" : "";
-      return `${icon} ${p.name}${banker}: ${pl >= 0 ? "+" : ""}₹${pl.toFixed(0)}`;
-    }),
+    `Buy-in: ₹${results.buy_in_amount}  |  ${results.chips_per_buyin} chips`,
+    divider,
+    `*🏆 FINAL RESULTS*`,
+    divider,
     ``,
-    `_Sent via Poker Night_ 🎰`,
-  ];
-  return lines.join("\n");
+    ...resultLines,
+    ...settlementLines,
+    ``,
+    divider,
+    `_Poker Night_ ♠`,
+  ].join("\n");
 }
 
 function whatsappUrl(phone: string, message: string): string {
