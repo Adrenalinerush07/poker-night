@@ -1,11 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+import bcrypt
 from .. import models, schemas
 from ..database import get_db
 
 router = APIRouter(prefix="/games", tags=["games"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _hash(passcode: str) -> str:
+    return bcrypt.hashpw(passcode.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify(passcode: str, hashed: str) -> bool:
+    return bcrypt.checkpw(passcode.encode(), hashed.encode())
 
 
 # ── Passcode dependency ────────────────────────────────────────────────────────
@@ -18,7 +25,7 @@ def require_passcode(
     game = db.query(models.Game).filter(models.Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
-    if game.passcode_hash and not pwd_context.verify(x_game_passcode, game.passcode_hash):
+    if game.passcode_hash and not _verify(x_game_passcode, game.passcode_hash):
         raise HTTPException(status_code=403, detail="Invalid passcode")
     return game
 
@@ -39,7 +46,7 @@ def create_game(payload: schemas.GameCreate, db: Session = Depends(get_db)):
     game = models.Game(
         buy_in_amount=payload.buy_in_amount,
         chips_per_buyin=payload.chips_per_buyin,
-        passcode_hash=pwd_context.hash(payload.passcode.strip()),
+        passcode_hash=_hash(payload.passcode.strip()),
     )
     db.add(game)
     db.flush()
@@ -50,6 +57,7 @@ def create_game(payload: schemas.GameCreate, db: Session = Depends(get_db)):
             name=p.name,
             avatar=p.avatar,
             is_banker=p.is_banker,
+            phone=p.phone or None,
         )
         db.add(player)
         db.flush()
@@ -65,7 +73,7 @@ def verify_passcode(game_id: int, payload: schemas.PasscodeVerify, db: Session =
     game = db.query(models.Game).filter(models.Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
-    if game.passcode_hash and not pwd_context.verify(payload.passcode.strip(), game.passcode_hash):
+    if game.passcode_hash and not _verify(payload.passcode.strip(), game.passcode_hash):
         raise HTTPException(status_code=403, detail="Invalid passcode")
     return {"status": "ok", "game_id": game_id, "game_status": game.status}
 
@@ -176,6 +184,7 @@ def _build_results(game: models.Game) -> schemas.GameResults:
             name=player.name,
             avatar=player.avatar,
             is_banker=player.is_banker,
+            phone=player.phone,
             buy_in_count=buy_in_count,
             chips_invested=chips_invested,
             final_chips=final,

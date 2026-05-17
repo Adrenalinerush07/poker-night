@@ -7,6 +7,7 @@ class PlayerCreate(BaseModel):
     name: str
     avatar: str
     is_banker: bool = False
+    phone: Optional[str] = None
 
 
 class GameCreate(BaseModel):
@@ -33,6 +34,7 @@ class PlayerOut(BaseModel):
     name: str
     avatar: str
     is_banker: bool
+    phone: Optional[str] = None
     final_chips: Optional[int] = None
     buy_ins: list[BuyInOut] = []
 
@@ -64,6 +66,7 @@ class PlayerResult(BaseModel):
     name: str
     avatar: str
     is_banker: bool
+    phone: Optional[str] = None
     buy_in_count: int
     chips_invested: int
     final_chips: int

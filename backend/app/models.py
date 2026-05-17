@@ -31,6 +31,7 @@ class Player(Base):
     name = Column(String, nullable=False)
     avatar = Column(String, nullable=False)
     is_banker = Column(Boolean, default=False)
+    phone = Column(String, nullable=True)
     final_chips = Column(Integer, nullable=True)
 
     game = relationship("Game", back_populates="players")

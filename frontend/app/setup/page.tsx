@@ -10,6 +10,7 @@ interface PlayerEntry {
   name: string;
   avatar: string;
   is_banker: boolean;
+  phone: string;
 }
 
 type Step = "players" | "buyin" | "passcode";
@@ -33,7 +34,7 @@ function SetupForm() {
     const initial = Array.from({ length: count }, () => {
       const animal = randomAnimal(assigned);
       assigned.push(animal);
-      return { name: "", avatar: animal, is_banker: false };
+      return { name: "", avatar: animal, is_banker: false, phone: "" };
     });
     initial[0].is_banker = true;
     setPlayers(initial);
@@ -44,6 +45,9 @@ function SetupForm() {
 
   const updateName = (index: number, name: string) =>
     setPlayers((prev) => prev.map((p, i) => (i === index ? { ...p, name } : p)));
+
+  const updatePhone = (index: number, phone: string) =>
+    setPlayers((prev) => prev.map((p, i) => (i === index ? { ...p, phone } : p)));
 
   const playersValid = players.every((p) => p.name.trim().length > 0);
   const buyInValid = parseFloat(buyInAmount) > 0 && parseInt(chipsPerBuyin) > 0;
@@ -62,6 +66,7 @@ function SetupForm() {
           name: p.name.trim(),
           avatar: p.avatar,
           is_banker: p.is_banker,
+          phone: p.phone.trim() || undefined,
         })),
       });
       savePasscode(game.id, passcode.trim());
@@ -121,30 +126,42 @@ function SetupForm() {
           </p>
           <div className="space-y-3">
             {players.map((player, i) => (
-              <div key={i} className="card p-4 flex items-center gap-3">
-                <div
-                  className="relative flex-shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 cursor-pointer"
-                  style={{ borderColor: player.is_banker ? "var(--gold)" : "var(--border)" }}
-                  onClick={() => setBanker(i)}
-                >
-                  <img src={avatarUrl(player.avatar)} alt={player.avatar} className="w-full h-full" />
+              <div key={i} className="card p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div
+                    className="relative flex-shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 cursor-pointer"
+                    style={{ borderColor: player.is_banker ? "var(--gold)" : "var(--border)" }}
+                    onClick={() => setBanker(i)}
+                  >
+                    <img src={avatarUrl(player.avatar)} alt={player.avatar} className="w-full h-full" />
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder={`Player ${i + 1}`}
+                      value={player.name}
+                      onChange={(e) => updateName(i, e.target.value)}
+                      maxLength={20}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setBanker(i)}
+                    className="flex-shrink-0 text-lg transition-all"
+                    style={{ opacity: player.is_banker ? 1 : 0.3 }}
+                  >
+                    👑
+                  </button>
                 </div>
-                <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm flex-shrink-0" style={{ color: "var(--muted)" }}>📱</span>
                   <input
-                    type="text"
-                    placeholder={`Player ${i + 1}`}
-                    value={player.name}
-                    onChange={(e) => updateName(i, e.target.value)}
-                    maxLength={20}
+                    type="tel"
+                    placeholder="WhatsApp number (optional)"
+                    value={player.phone}
+                    onChange={(e) => updatePhone(i, e.target.value)}
+                    style={{ fontSize: 13, padding: "6px 10px" }}
                   />
                 </div>
-                <button
-                  onClick={() => setBanker(i)}
-                  className="flex-shrink-0 text-lg transition-all"
-                  style={{ opacity: player.is_banker ? 1 : 0.3 }}
-                >
-                  👑
-                </button>
               </div>
             ))}
           </div>

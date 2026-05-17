@@ -131,10 +131,100 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         </div>
       )}
 
-      <button className="btn btn-gold w-full" onClick={() => router.push("/")}>
+      {/* WhatsApp sharing */}
+      <WhatsAppShare results={results} />
+
+      <button className="btn btn-gold w-full mt-4" onClick={() => router.push("/")}>
         New Game ♠
       </button>
     </main>
+  );
+}
+
+function buildMessage(results: GameResults): string {
+  const sorted = [...results.players].sort((a, b) => b.profit_loss_inr - a.profit_loss_inr);
+  const lines = [
+    `🃏 *Poker Night — Game #${results.game_id}*`,
+    `💰 Buy-in: ₹${results.buy_in_amount} · ${results.chips_per_buyin} chips`,
+    ``,
+    `*Final Results:*`,
+    ...sorted.map((p) => {
+      const pl = p.profit_loss_inr;
+      const icon = pl > 0 ? "📈" : pl < 0 ? "📉" : "➖";
+      const banker = p.is_banker ? " 👑" : "";
+      return `${icon} ${p.name}${banker}: ${pl >= 0 ? "+" : ""}₹${pl.toFixed(0)}`;
+    }),
+    ``,
+    `_Sent via Poker Night_ 🎰`,
+  ];
+  return lines.join("\n");
+}
+
+function whatsappUrl(phone: string, message: string): string {
+  const cleaned = phone.replace(/\D/g, "");
+  return `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`;
+}
+
+function WhatsAppShare({ results }: { results: GameResults }) {
+  const playersWithPhone = results.players.filter((p) => p.phone);
+  if (playersWithPhone.length === 0) return null;
+
+  const message = buildMessage(results);
+
+  return (
+    <div className="card p-4 mb-4">
+      <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
+        <span>💬</span> Send Results via WhatsApp
+      </h3>
+      <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+        Tap to open WhatsApp with the results pre-filled
+      </p>
+      <div className="space-y-2">
+        {playersWithPhone.map((player) => {
+          const pl = player.profit_loss_inr;
+          return (
+            <a
+              key={player.player_id}
+              href={whatsappUrl(player.phone!, message)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-all"
+              style={{
+                background: "rgba(37,211,102,0.08)",
+                border: "1px solid rgba(37,211,102,0.25)",
+                textDecoration: "none",
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <img
+                  src={avatarUrl(player.avatar)}
+                  alt={player.name}
+                  className="w-8 h-8 rounded-full flex-shrink-0"
+                />
+                <div>
+                  <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                    {player.name}
+                    {player.is_banker && " 👑"}
+                  </p>
+                  <p className="text-xs" style={{ color: "var(--muted)" }}>
+                    {player.phone}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span
+                  className="text-sm font-bold"
+                  style={{ color: pl >= 0 ? "#27ae60" : "#e74c3c" }}
+                >
+                  {pl >= 0 ? "+" : ""}₹{pl.toFixed(0)}
+                </span>
+                <span className="text-lg">↗</span>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

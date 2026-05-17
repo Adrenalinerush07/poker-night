@@ -13,6 +13,12 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE games ADD COLUMN passcode_hash VARCHAR"))
         conn.commit()
 
+with engine.connect() as conn:
+    cols = [c["name"] for c in inspect(engine).get_columns("players")]
+    if "phone" not in cols:
+        conn.execute(text("ALTER TABLE players ADD COLUMN phone VARCHAR"))
+        conn.commit()
+
 app = FastAPI(title="Poker Night API")
 
 app.add_middleware(

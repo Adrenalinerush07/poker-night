@@ -56,7 +56,9 @@ html, body {
 
 /* Input styling */
 input[type="text"],
-input[type="number"] {
+input[type="number"],
+input[type="password"],
+input[type="tel"] {
   background: #0d1f17;
   border: 1px solid #245237;
   color: #e8f5e9;
@@ -69,12 +71,16 @@ input[type="number"] {
 }
 
 input[type="text"]:focus,
-input[type="number"]:focus {
+input[type="number"]:focus,
+input[type="password"]:focus,
+input[type="tel"]:focus {
   border-color: #d4af37;
 }
 
 input[type="text"]::placeholder,
-input[type="number"]::placeholder {
+input[type="number"]::placeholder,
+input[type="password"]::placeholder,
+input[type="tel"]::placeholder {
   color: #7cb88a;
 }
 

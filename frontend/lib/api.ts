@@ -4,6 +4,7 @@ export interface PlayerCreate {
   name: string;
   avatar: string;
   is_banker: boolean;
+  phone?: string;
 }
 
 export interface GameCreate {
@@ -42,6 +43,7 @@ export interface PlayerResult {
   name: string;
   avatar: string;
   is_banker: boolean;
+  phone?: string | null;
   buy_in_count: number;
   chips_invested: number;
   final_chips: number;
