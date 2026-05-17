@@ -4,21 +4,38 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { api, GameResults, PlayerResult } from "@/lib/api";
 import { avatarUrl } from "@/lib/avatars";
+import { getPasscode, clearPasscode } from "@/lib/passcode";
+import PasscodeGate from "@/components/PasscodeGate";
 
 export default function ResultsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const gameId = parseInt(id);
   const router = useRouter();
+  const [passcode, setPasscode] = useState<string | null>(null);
   const [results, setResults] = useState<GameResults | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.getResults(parseInt(id))
-      .then(setResults)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [id]);
+    const saved = getPasscode(gameId);
+    if (saved) setPasscode(saved);
+    else setLoading(false);
+  }, [gameId]);
 
+  useEffect(() => {
+    if (!passcode) return;
+    setLoading(true);
+    api.getResults(gameId, passcode)
+      .then(setResults)
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : "";
+        if (msg.includes("403")) { clearPasscode(gameId); setPasscode(null); }
+        else setError(msg);
+      })
+      .finally(() => setLoading(false));
+  }, [passcode, gameId]);
+
+  if (!passcode) return <PasscodeGate gameId={gameId} onVerified={setPasscode} />;
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-gold text-4xl animate-pulse">♠</div></div>;
   if (!results) return <div className="min-h-screen flex items-center justify-center text-red-400">{error}</div>;
 

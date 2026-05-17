@@ -4,35 +4,55 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { api, Game, Player } from "@/lib/api";
 import { avatarUrl } from "@/lib/avatars";
+import { getPasscode, clearPasscode } from "@/lib/passcode";
+import PasscodeGate from "@/components/PasscodeGate";
 
 export default function GamePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const gameId = parseInt(id);
   const router = useRouter();
+
+  const [passcode, setPasscode] = useState<string | null>(null);
   const [game, setGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionPlayer, setActionPlayer] = useState<number | null>(null);
   const [error, setError] = useState("");
 
+  // On mount, check sessionStorage for a saved passcode
   useEffect(() => {
-    api.getGame(parseInt(id))
-      .then(setGame)
-      .catch(() => setError("Game not found"))
-      .finally(() => setLoading(false));
-  }, [id]);
+    const saved = getPasscode(gameId);
+    if (saved) setPasscode(saved);
+    else setLoading(false);
+  }, [gameId]);
 
-  const updatePlayer = (updated: Player) => {
+  // Once we have a passcode, load the game
+  useEffect(() => {
+    if (!passcode) return;
+    setLoading(true);
+    api.getGame(gameId, passcode)
+      .then(setGame)
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : "";
+        if (msg.includes("403")) {
+          clearPasscode(gameId);
+          setPasscode(null);
+        } else {
+          setError("Game not found");
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [passcode, gameId]);
+
+  const updatePlayer = (updated: Player) =>
     setGame((prev) =>
-      prev
-        ? { ...prev, players: prev.players.map((p) => (p.id === updated.id ? updated : p)) }
-        : prev
+      prev ? { ...prev, players: prev.players.map((p) => (p.id === updated.id ? updated : p)) } : prev
     );
-  };
 
   const handleBuyIn = async (player: Player) => {
-    if (!game || actionPlayer !== null) return;
+    if (!game || !passcode || actionPlayer !== null) return;
     setActionPlayer(player.id);
     try {
-      updatePlayer(await api.addBuyIn(game.id, player.id));
+      updatePlayer(await api.addBuyIn(game.id, player.id, passcode));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to add buy-in");
     } finally {
@@ -41,10 +61,10 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
   };
 
   const handleRemoveBuyIn = async (player: Player) => {
-    if (!game || actionPlayer !== null) return;
+    if (!game || !passcode || actionPlayer !== null) return;
     setActionPlayer(player.id);
     try {
-      updatePlayer(await api.removeBuyIn(game.id, player.id));
+      updatePlayer(await api.removeBuyIn(game.id, player.id, passcode));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Cannot remove buy-in");
     } finally {
@@ -52,12 +72,12 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
     }
   };
 
+  // No passcode yet — show gate
+  if (!passcode) return <PasscodeGate gameId={gameId} onVerified={setPasscode} />;
+
   if (loading) {
     return (
-      <div
-        className="fixed inset-0 flex items-center justify-center"
-        style={{ background: "var(--bg)" }}
-      >
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--bg)" }}>
         <div className="text-gold text-5xl animate-pulse">♠</div>
       </div>
     );
@@ -79,12 +99,7 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
   const banker = game.players.find((p) => p.is_banker);
 
   return (
-    // One full-screen canvas — no header, no footer
-    <div
-      className="fixed inset-0 overflow-hidden"
-      style={{ background: "var(--bg)" }}
-    >
-      {/* Felt texture across the whole bg */}
+    <div className="fixed inset-0 overflow-hidden" style={{ background: "var(--bg)" }}>
       <div
         className="absolute inset-0 opacity-30"
         style={{
@@ -93,7 +108,7 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
         }}
       />
 
-      {/* Floating info pill — top center */}
+      {/* Floating info pill */}
       <div
         className="absolute top-4 left-1/2 z-30 flex items-center gap-3 px-4 py-2 rounded-full"
         style={{
@@ -110,12 +125,9 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
           ₹{game.buy_in_amount} / {game.chips_per_buyin} chips
         </span>
         <span style={{ color: "var(--border)" }}>·</span>
-        <span className="text-xs" style={{ color: "var(--muted)" }}>
-          👑 {banker?.name}
-        </span>
+        <span className="text-xs" style={{ color: "var(--muted)" }}>👑 {banker?.name}</span>
       </div>
 
-      {/* Error toast */}
       {error && (
         <div
           className="absolute top-16 left-1/2 z-40 px-4 py-2 rounded-lg text-xs text-red-300"
@@ -129,7 +141,6 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
         </div>
       )}
 
-      {/* Table + players — centered on screen */}
       <PokerTable
         game={game}
         onBuyIn={handleBuyIn}
@@ -137,7 +148,7 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
         actionPlayer={actionPlayer}
       />
 
-      {/* End game — floating pill button at bottom center */}
+      {/* End game pill */}
       <div className="absolute bottom-8 left-1/2 z-30" style={{ transform: "translateX(-50%)" }}>
         <button
           onClick={() => router.push(`/game/${id}/end`)}
@@ -159,10 +170,7 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
 }
 
 function PokerTable({
-  game,
-  onBuyIn,
-  onRemoveBuyIn,
-  actionPlayer,
+  game, onBuyIn, onRemoveBuyIn, actionPlayer,
 }: {
   game: Game;
   onBuyIn: (p: Player) => void;
@@ -172,28 +180,15 @@ function PokerTable({
   const players = game.players;
   const count = players.length;
 
-  // Orbit radii as % of the container (which is the full viewport via fixed inset-0)
-  // Tighter radii keep players away from screen edges
   const positions = players.map((_, i) => {
     const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
-    return {
-      x: 50 + 40 * Math.cos(angle),
-      y: 50 + 33 * Math.sin(angle),
-    };
+    return { x: 50 + 40 * Math.cos(angle), y: 50 + 33 * Math.sin(angle) };
   });
 
   return (
-    // Covers the full fixed parent
     <div className="absolute inset-0 flex items-center justify-center">
-      {/* Oval table — bigger, more prominent */}
-      <div
-        className="relative flex-shrink-0"
-        style={{
-          width: "min(62vw, 260px)",
-          aspectRatio: "16 / 10",
-        }}
-      >
-        {/* Outer wood rim */}
+      {/* Oval table */}
+      <div className="relative flex-shrink-0" style={{ width: "min(62vw, 260px)", aspectRatio: "16/10" }}>
         <div
           className="absolute inset-0 rounded-[50%]"
           style={{
@@ -201,15 +196,10 @@ function PokerTable({
             boxShadow: "0 8px 40px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.05)",
           }}
         />
-        {/* Inner rail */}
         <div
           className="absolute rounded-[50%]"
-          style={{
-            inset: "7px",
-            background: "linear-gradient(145deg, #4a2e14, #2a1a08)",
-          }}
+          style={{ inset: "7px", background: "linear-gradient(145deg, #4a2e14, #2a1a08)" }}
         />
-        {/* Felt surface */}
         <div
           className="absolute rounded-[50%] flex items-center justify-center"
           style={{
@@ -226,7 +216,6 @@ function PokerTable({
         </div>
       </div>
 
-      {/* Player cards — positioned around the table */}
       {players.map((player, i) => {
         const pos = positions[i];
         const buyInCount = player.buy_ins.length;
@@ -234,12 +223,7 @@ function PokerTable({
           <div
             key={player.id}
             className="absolute"
-            style={{
-              left: `${pos.x}%`,
-              top: `${pos.y}%`,
-              transform: "translate(-50%, -50%)",
-              zIndex: 10,
-            }}
+            style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: "translate(-50%, -50%)", zIndex: 10 }}
           >
             <PlayerCard
               player={player}
@@ -257,12 +241,7 @@ function PokerTable({
 }
 
 function PlayerCard({
-  player,
-  buyInCount,
-  totalInvested,
-  onBuyIn,
-  onRemoveBuyIn,
-  loading,
+  player, buyInCount, totalInvested, onBuyIn, onRemoveBuyIn, loading,
 }: {
   player: Player;
   buyInCount: number;
@@ -279,84 +258,41 @@ function PlayerCard({
         background: "rgba(15,34,24,0.75)",
         border: `1px solid ${player.is_banker ? "rgba(212,175,55,0.5)" : "rgba(36,82,55,0.6)"}`,
         backdropFilter: "blur(6px)",
-        boxShadow: player.is_banker
-          ? "0 0 12px rgba(212,175,55,0.2)"
-          : "0 2px 12px rgba(0,0,0,0.4)",
+        boxShadow: player.is_banker ? "0 0 12px rgba(212,175,55,0.2)" : "0 2px 12px rgba(0,0,0,0.4)",
       }}
     >
-      {/* Avatar */}
       <div
         className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0"
-        style={{
-          border: `2px solid ${player.is_banker ? "var(--gold)" : "var(--border)"}`,
-        }}
+        style={{ border: `2px solid ${player.is_banker ? "var(--gold)" : "var(--border)"}` }}
       >
         <img src={avatarUrl(player.avatar)} alt={player.name} className="w-full h-full" />
       </div>
-
-      {/* Name */}
       <span
         className="text-center leading-tight font-medium"
-        style={{
-          fontSize: 10,
-          color: player.is_banker ? "var(--gold)" : "var(--text)",
-          maxWidth: 64,
-          wordBreak: "break-word",
-          lineHeight: 1.2,
-        }}
+        style={{ fontSize: 10, color: player.is_banker ? "var(--gold)" : "var(--text)", maxWidth: 64, wordBreak: "break-word", lineHeight: 1.2 }}
       >
-        {player.is_banker ? "👑 " : ""}
-        {player.name}
+        {player.is_banker ? "👑 " : ""}{player.name}
       </span>
-
-      {/* Amount */}
-      <span style={{ fontSize: 9, color: "var(--muted)" }}>
-        ₹{totalInvested.toLocaleString()}
-      </span>
-
-      {/* Buy-in controls */}
+      <span style={{ fontSize: 9, color: "var(--muted)" }}>₹{totalInvested.toLocaleString()}</span>
       <div className="flex items-center gap-1 w-full">
         {buyInCount > 1 && (
           <button
             onClick={onRemoveBuyIn}
             disabled={loading}
-            title="Undo last buy-in"
             style={{
-              width: 18,
-              height: 18,
-              borderRadius: 4,
-              fontSize: 13,
-              lineHeight: 1,
-              flexShrink: 0,
-              background: "rgba(192,57,43,0.25)",
-              border: "1px solid rgba(192,57,43,0.4)",
-              color: "#e74c3c",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              width: 18, height: 18, borderRadius: 4, fontSize: 13, lineHeight: 1, flexShrink: 0,
+              background: "rgba(192,57,43,0.25)", border: "1px solid rgba(192,57,43,0.4)",
+              color: "#e74c3c", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
             }}
-          >
-            −
-          </button>
+          >−</button>
         )}
         <button
           onClick={onBuyIn}
           disabled={loading}
           style={{
-            flex: 1,
-            padding: "3px 4px",
-            fontSize: 9,
-            fontWeight: 700,
-            borderRadius: 5,
-            background: loading
-              ? "rgba(39,174,96,0.3)"
-              : "linear-gradient(135deg, #27ae60, #1e8449)",
-            color: "white",
-            border: "none",
-            cursor: loading ? "not-allowed" : "pointer",
-            whiteSpace: "nowrap",
-            letterSpacing: "0.3px",
+            flex: 1, padding: "3px 4px", fontSize: 9, fontWeight: 700, borderRadius: 5,
+            background: loading ? "rgba(39,174,96,0.3)" : "linear-gradient(135deg, #27ae60, #1e8449)",
+            color: "white", border: "none", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
           }}
         >
           {loading ? "…" : `+1  ×${buyInCount}`}

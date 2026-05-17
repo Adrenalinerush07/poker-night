@@ -9,6 +9,7 @@ export interface PlayerCreate {
 export interface GameCreate {
   buy_in_amount: number;
   chips_per_buyin: number;
+  passcode: string;
   players: PlayerCreate[];
 }
 
@@ -55,11 +56,11 @@ export interface GameResults {
   players: PlayerResult[];
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+async function request<T>(path: string, options?: RequestInit, passcode?: string): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (passcode) headers["x-game-passcode"] = passcode;
+
+  const res = await fetch(`${API}${path}`, { headers, ...options });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Request failed: ${res.status}`);
@@ -68,22 +69,34 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // No passcode needed — creates the game
   createGame: (data: GameCreate) =>
     request<Game>("/games", { method: "POST", body: JSON.stringify(data) }),
 
-  getGame: (id: number) => request<Game>(`/games/${id}`),
+  // Verify passcode before accessing a game
+  verifyPasscode: (gameId: number, passcode: string) =>
+    request<{ status: string; game_id: number; game_status: string }>(
+      `/games/${gameId}/verify`,
+      { method: "POST", body: JSON.stringify({ passcode }) }
+    ),
 
-  addBuyIn: (gameId: number, playerId: number) =>
-    request<Player>(`/games/${gameId}/players/${playerId}/buyin`, { method: "POST" }),
+  // All below require passcode header
+  getGame: (id: number, passcode: string) =>
+    request<Game>(`/games/${id}`, {}, passcode),
 
-  removeBuyIn: (gameId: number, playerId: number) =>
-    request<Player>(`/games/${gameId}/players/${playerId}/buyin`, { method: "DELETE" }),
+  addBuyIn: (gameId: number, playerId: number, passcode: string) =>
+    request<Player>(`/games/${gameId}/players/${playerId}/buyin`, { method: "POST" }, passcode),
 
-  endGame: (gameId: number, finalChips: { player_id: number; final_chips: number }[]) =>
-    request<GameResults>(`/games/${gameId}/end`, {
-      method: "POST",
-      body: JSON.stringify({ final_chips: finalChips }),
-    }),
+  removeBuyIn: (gameId: number, playerId: number, passcode: string) =>
+    request<Player>(`/games/${gameId}/players/${playerId}/buyin`, { method: "DELETE" }, passcode),
 
-  getResults: (gameId: number) => request<GameResults>(`/games/${gameId}/results`),
+  endGame: (gameId: number, finalChips: { player_id: number; final_chips: number }[], passcode: string) =>
+    request<GameResults>(
+      `/games/${gameId}/end`,
+      { method: "POST", body: JSON.stringify({ final_chips: finalChips }) },
+      passcode
+    ),
+
+  getResults: (gameId: number, passcode: string) =>
+    request<GameResults>(`/games/${gameId}/results`, {}, passcode),
 };

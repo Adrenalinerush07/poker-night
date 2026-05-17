@@ -17,6 +17,7 @@ class Game(Base):
     status = Column(Enum(GameStatus), default=GameStatus.active, nullable=False)
     buy_in_amount = Column(Float, nullable=False)
     chips_per_buyin = Column(Integer, nullable=False)
+    passcode_hash = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     players = relationship("Player", back_populates="game", cascade="all, delete-orphan")

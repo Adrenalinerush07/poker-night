@@ -4,6 +4,8 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { api, Game } from "@/lib/api";
 import { avatarUrl } from "@/lib/avatars";
+import { getPasscode, clearPasscode } from "@/lib/passcode";
+import PasscodeGate from "@/components/PasscodeGate";
 
 const DENOMINATIONS = [
   { key: "black", label: "Black", value: 100, color: "#2c2c2c", border: "#555" },
@@ -40,7 +42,10 @@ function isComplete(counts: ChipCounts): boolean {
 
 export default function EndGamePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const gameId = parseInt(id);
   const router = useRouter();
+
+  const [passcode, setPasscode] = useState<string | null>(null);
   const [game, setGame] = useState<Game | null>(null);
   const [chips, setChips] = useState<Record<number, ChipCounts>>({});
   const [loading, setLoading] = useState(true);
@@ -48,17 +53,30 @@ export default function EndGamePage({ params }: { params: Promise<{ id: string }
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.getGame(parseInt(id))
+    const saved = getPasscode(gameId);
+    if (saved) setPasscode(saved);
+    else setLoading(false);
+  }, [gameId]);
+
+  useEffect(() => {
+    if (!passcode) return;
+    setLoading(true);
+    api.getGame(gameId, passcode)
       .then((g) => {
         setGame(g);
         const initial: Record<number, ChipCounts> = {};
         g.players.forEach((p) => { initial[p.id] = emptyChipCounts(); });
         setChips(initial);
       })
-      .catch(() => setError("Game not found"))
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : "";
+        if (msg.includes("403")) { clearPasscode(gameId); setPasscode(null); }
+        else setError("Game not found");
+      })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [passcode, gameId]);
 
+  if (!passcode) return <PasscodeGate gameId={gameId} onVerified={setPasscode} />;
   if (loading) return <Spinner />;
   if (!game) return <ErrorMsg msg={error} />;
 
@@ -88,7 +106,8 @@ export default function EndGamePage({ params }: { params: Promise<{ id: string }
         game.players.map((p) => ({
           player_id: p.id,
           final_chips: calcTotal(chips[p.id]),
-        }))
+        })),
+        passcode
       );
       router.push(`/game/${id}/results`);
     } catch (e: unknown) {

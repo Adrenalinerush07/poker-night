@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { avatarUrl, randomAnimal } from "@/lib/avatars";
 import { api } from "@/lib/api";
+import { savePasscode } from "@/lib/passcode";
 
 interface PlayerEntry {
   name: string;
@@ -11,15 +12,19 @@ interface PlayerEntry {
   is_banker: boolean;
 }
 
+type Step = "players" | "buyin" | "passcode";
+
 function SetupForm() {
   const router = useRouter();
   const params = useSearchParams();
   const count = parseInt(params.get("players") || "4");
 
-  const [step, setStep] = useState<"players" | "buyin">("players");
+  const [step, setStep] = useState<Step>("players");
   const [players, setPlayers] = useState<PlayerEntry[]>([]);
-  const [buyInAmount, setBuyInAmount] = useState<string>("500");
-  const [chipsPerBuyin, setChipsPerBuyin] = useState<string>("5000");
+  const [buyInAmount, setBuyInAmount] = useState("500");
+  const [chipsPerBuyin, setChipsPerBuyin] = useState("5000");
+  const [passcode, setPasscode] = useState("");
+  const [passcodeConfirm, setPasscodeConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,33 +39,32 @@ function SetupForm() {
     setPlayers(initial);
   }, [count]);
 
-  const setBanker = (index: number) => {
-    setPlayers((prev) =>
-      prev.map((p, i) => ({ ...p, is_banker: i === index }))
-    );
-  };
+  const setBanker = (index: number) =>
+    setPlayers((prev) => prev.map((p, i) => ({ ...p, is_banker: i === index })));
 
-  const updateName = (index: number, name: string) => {
+  const updateName = (index: number, name: string) =>
     setPlayers((prev) => prev.map((p, i) => (i === index ? { ...p, name } : p)));
-  };
 
   const playersValid = players.every((p) => p.name.trim().length > 0);
-  const buyInValid =
-    parseFloat(buyInAmount) > 0 && parseInt(chipsPerBuyin) > 0;
+  const buyInValid = parseFloat(buyInAmount) > 0 && parseInt(chipsPerBuyin) > 0;
+  const passcodeValid = passcode.trim().length >= 4 && passcode === passcodeConfirm;
 
   const handleStart = async () => {
+    if (!passcodeValid) return;
     setLoading(true);
     setError("");
     try {
       const game = await api.createGame({
         buy_in_amount: parseFloat(buyInAmount),
         chips_per_buyin: parseInt(chipsPerBuyin),
+        passcode: passcode.trim(),
         players: players.map((p) => ({
           name: p.name.trim(),
           avatar: p.avatar,
           is_banker: p.is_banker,
         })),
       });
+      savePasscode(game.id, passcode.trim());
       router.push(`/game/${game.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create game");
@@ -69,11 +73,20 @@ function SetupForm() {
     }
   };
 
+  const stepOrder: Step[] = ["players", "buyin", "passcode"];
+  const stepIndex = stepOrder.indexOf(step);
+
   return (
     <main className="min-h-screen px-4 py-8 max-w-lg mx-auto fade-in">
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
-        <button className="btn btn-ghost px-3 py-2 text-sm" onClick={() => router.push("/")}>
+        <button
+          className="btn btn-ghost px-3 py-2 text-sm"
+          onClick={() => {
+            if (step === "players") router.push("/");
+            else setStep(stepOrder[stepIndex - 1]);
+          }}
+        >
           ← Back
         </button>
         <h1 className="text-xl font-bold text-gold">Game Setup</h1>
@@ -81,11 +94,26 @@ function SetupForm() {
 
       {/* Step indicator */}
       <div className="flex items-center gap-2 mb-8">
-        <StepDot active={step === "players"} done={step === "buyin"} label="Players" />
-        <div className="flex-1 h-px" style={{ background: step === "buyin" ? "var(--gold)" : "var(--border)" }} />
-        <StepDot active={step === "buyin"} done={false} label="Buy-in" />
+        {(["players", "buyin", "passcode"] as Step[]).map((s, i, arr) => (
+          <>
+            <StepDot
+              key={s}
+              active={step === s}
+              done={stepIndex > i}
+              label={s === "players" ? "Players" : s === "buyin" ? "Buy-in" : "Passcode"}
+            />
+            {i < arr.length - 1 && (
+              <div
+                key={`line-${i}`}
+                className="flex-1 h-px"
+                style={{ background: stepIndex > i ? "var(--gold)" : "var(--border)" }}
+              />
+            )}
+          </>
+        ))}
       </div>
 
+      {/* ── Step 1: Players ── */}
       {step === "players" && (
         <div className="fade-in">
           <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
@@ -94,20 +122,13 @@ function SetupForm() {
           <div className="space-y-3">
             {players.map((player, i) => (
               <div key={i} className="card p-4 flex items-center gap-3">
-                {/* Avatar */}
                 <div
                   className="relative flex-shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 cursor-pointer"
                   style={{ borderColor: player.is_banker ? "var(--gold)" : "var(--border)" }}
                   onClick={() => setBanker(i)}
                 >
-                  <img
-                    src={avatarUrl(player.avatar)}
-                    alt={player.avatar}
-                    className="w-full h-full"
-                  />
+                  <img src={avatarUrl(player.avatar)} alt={player.avatar} className="w-full h-full" />
                 </div>
-
-                {/* Name input */}
                 <div className="flex-1">
                   <input
                     type="text"
@@ -117,12 +138,9 @@ function SetupForm() {
                     maxLength={20}
                   />
                 </div>
-
-                {/* Banker badge */}
                 <button
                   onClick={() => setBanker(i)}
                   className="flex-shrink-0 text-lg transition-all"
-                  title="Set as banker"
                   style={{ opacity: player.is_banker ? 1 : 0.3 }}
                 >
                   👑
@@ -130,7 +148,6 @@ function SetupForm() {
               </div>
             ))}
           </div>
-
           <button
             className="btn btn-gold w-full mt-6"
             disabled={!playersValid}
@@ -141,12 +158,12 @@ function SetupForm() {
         </div>
       )}
 
+      {/* ── Step 2: Buy-in ── */}
       {step === "buyin" && (
         <div className="fade-in">
           <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
             Set the buy-in amount and chip value for the game.
           </p>
-
           <div className="card p-6 space-y-5">
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: "var(--muted)" }}>
@@ -170,7 +187,6 @@ function SetupForm() {
                 onChange={(e) => setChipsPerBuyin(e.target.value)}
               />
             </div>
-
             {buyInValid && (
               <div
                 className="rounded-lg p-3 text-sm"
@@ -180,21 +196,73 @@ function SetupForm() {
               </div>
             )}
           </div>
+          <button
+            className="btn btn-gold w-full mt-6"
+            disabled={!buyInValid}
+            onClick={() => setStep("passcode")}
+          >
+            Next: Passcode →
+          </button>
+        </div>
+      )}
+
+      {/* ── Step 3: Passcode ── */}
+      {step === "passcode" && (
+        <div className="fade-in">
+          <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+            Set a passcode for this table. Anyone who wants to view the game will need it.
+          </p>
+          <div className="card p-6 space-y-5">
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: "var(--muted)" }}>
+                Passcode <span style={{ color: "var(--border)" }}>(min 4 characters)</span>
+              </label>
+              <input
+                type="password"
+                placeholder="Set a passcode"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: "var(--muted)" }}>
+                Confirm passcode
+              </label>
+              <input
+                type="password"
+                placeholder="Confirm passcode"
+                value={passcodeConfirm}
+                onChange={(e) => setPasscodeConfirm(e.target.value)}
+                autoComplete="new-password"
+              />
+              {passcodeConfirm && passcode !== passcodeConfirm && (
+                <p className="text-xs mt-1.5 text-red-400">Passcodes don't match</p>
+              )}
+              {passcode.length > 0 && passcode.length < 4 && (
+                <p className="text-xs mt-1.5 text-red-400">Minimum 4 characters</p>
+              )}
+            </div>
+
+            {passcodeValid && (
+              <div
+                className="rounded-lg p-3 text-sm"
+                style={{ background: "var(--felt)", color: "#27ae60" }}
+              >
+                ✓ Passcode set — share Game ID + passcode with anyone joining
+              </div>
+            )}
+          </div>
 
           {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
 
-          <div className="flex gap-3 mt-6">
-            <button className="btn btn-ghost flex-1" onClick={() => setStep("players")}>
-              ← Back
-            </button>
-            <button
-              className="btn btn-gold flex-1"
-              disabled={!buyInValid || loading}
-              onClick={handleStart}
-            >
-              {loading ? "Starting..." : "Start Game ♠"}
-            </button>
-          </div>
+          <button
+            className="btn btn-gold w-full mt-6"
+            disabled={!passcodeValid || loading}
+            onClick={handleStart}
+          >
+            {loading ? "Creating..." : "Start Game ♠"}
+          </button>
         </div>
       )}
     </main>

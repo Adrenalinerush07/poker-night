@@ -12,7 +12,12 @@ class PlayerCreate(BaseModel):
 class GameCreate(BaseModel):
     buy_in_amount: float
     chips_per_buyin: int
+    passcode: str
     players: list[PlayerCreate]
+
+
+class PasscodeVerify(BaseModel):
+    passcode: str
 
 
 class BuyInOut(BaseModel):
