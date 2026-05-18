@@ -3,7 +3,10 @@ import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
-const INTERNAL_API = process.env.INTERNAL_API_URL || "http://localhost:8001";
+const INTERNAL_API =
+  process.env.INTERNAL_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8001";
 
 const ADJECTIVES = ["Royal","Lucky","Wild","Golden","Blazing","Shadow","Thunder","Crimson","Midnight","Silver","Velvet","Rusty","Neon","Frozen","Stormy"];
 const ANIMALS = ["Tiger","Wolf","Eagle","Lion","Shark","Cobra","Falcon","Bear","Fox","Panther","Jaguar","Raven","Viper","Lynx","Bison"];
