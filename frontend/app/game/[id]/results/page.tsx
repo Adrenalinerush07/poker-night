@@ -7,6 +7,12 @@ import { avatarUrl } from "@/lib/avatars";
 import { getPasscode, clearPasscode } from "@/lib/passcode";
 import PasscodeGate from "@/components/PasscodeGate";
 
+const ADJECTIVES = ["Royal","Lucky","Wild","Golden","Blazing","Shadow","Thunder","Crimson","Midnight","Silver","Velvet","Rusty","Neon","Frozen","Stormy"];
+const ANIMALS = ["Tiger","Wolf","Eagle","Lion","Shark","Cobra","Falcon","Bear","Fox","Panther","Jaguar","Raven","Viper","Lynx","Bison"];
+function gameName(id: number): string {
+  return `${ADJECTIVES[id % ADJECTIVES.length]} ${ANIMALS[Math.floor(id / ADJECTIVES.length) % ANIMALS.length]}`;
+}
+
 export default function ResultsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const gameId = parseInt(id);
@@ -56,7 +62,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         <div className="text-5xl mb-2">🏆</div>
         <h1 className="text-2xl font-bold text-gold">Game Over</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Game #{id} · Buy-in ₹{results.buy_in_amount}
+          {gameName(gameId)} · Buy-in ₹{results.buy_in_amount}
         </p>
       </div>
 
@@ -131,8 +137,11 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         </div>
       )}
 
+      {/* Result card image */}
+      <ResultCardShare gameId={gameId} />
+
       {/* WhatsApp sharing */}
-      <WhatsAppShare results={results} />
+      <WhatsAppShare results={results} gameId={gameId} />
 
       <button className="btn btn-gold w-full mt-4" onClick={() => router.push("/")}>
         New Game ♠
@@ -141,125 +150,86 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   );
 }
 
-function buildMessage(results: GameResults): string {
-  const sorted = [...results.players].sort((a, b) => b.profit_loss_inr - a.profit_loss_inr);
-  const banker = results.players.find((p) => p.is_banker);
-  const settlements = results.players.filter((p) => !p.is_banker && p.profit_loss_inr > 0);
-
-  const D = `━━━━━━━━━━━━━━━━━━━━━`;
-
-  // Result rows using plain text — no emojis at all
-  const resultLines = sorted.map((p, i) => {
-    const pl = p.profit_loss_inr;
-    const rank = `${i + 1}.`;
-    const name = p.is_banker ? `${p.name} (Banker)` : p.name;
-    const plStr = pl > 0 ? `+Rs.${pl.toFixed(0)}  WIN` : pl < 0 ? `-Rs.${Math.abs(pl).toFixed(0)}  LOSS` : `Rs.0`;
-    return `  ${rank}  *${name}*\n       ${plStr}`;
-  });
-
-  // Settlement section
-  let settlementBlock: string[];
-  if (settlements.length > 0 && banker) {
-    settlementBlock = [
-      ``,
-      D,
-      `*SETTLEMENT*`,
-      D,
-      ``,
-      ...settlements.map((p) => `  *${banker.name}* pays *${p.name}*\n  Amount: Rs.${p.profit_loss_inr.toFixed(0)}`),
-    ];
-  } else {
-    settlementBlock = [
-      ``,
-      D,
-      `*SETTLEMENT*`,
-      D,
-      `  No payouts — banker covers losses`,
-    ];
-  }
-
-  return [
-    D,
-    `*POKER NIGHT — GAME #${results.game_id}*`,
-    D,
-    ``,
-    `  Buy-in :  Rs.${results.buy_in_amount}`,
-    `  Chips  :  ${results.chips_per_buyin} per buy-in`,
-    ``,
-    D,
-    `*FINAL RESULTS*`,
-    D,
-    ``,
-    ...resultLines,
-    ...settlementBlock,
-    ``,
-    D,
-    `_Sent via Poker Night_`,
-    D,
-  ].join("\n");
+function ResultCardShare({ gameId }: { gameId: number }) {
+  return (
+    <div className="card p-4 mb-4">
+      <h3 className="font-semibold text-sm mb-3" style={{ color: "var(--muted)" }}>
+        Result Card
+      </h3>
+      <img
+        src={`/api/result-card/${gameId}`}
+        alt="Result card"
+        className="w-full rounded-lg"
+        style={{ border: "1px solid var(--border)" }}
+      />
+    </div>
+  );
 }
 
-function whatsappUrl(phone: string, message: string): string {
-  const cleaned = phone.replace(/\D/g, "");
-  return `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`;
-}
-
-function WhatsAppShare({ results }: { results: GameResults }) {
+function WhatsAppShare({ results, gameId }: { results: GameResults; gameId: number }) {
   const playersWithPhone = results.players.filter((p) => p.phone);
   if (playersWithPhone.length === 0) return null;
 
-  const message = buildMessage(results);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  async function sendTo(player: PlayerResult) {
+    try {
+      const blob = await fetch(`/api/result-card/${gameId}`).then((r) => r.blob());
+      // Copy image to clipboard
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    } catch {
+      // clipboard write not supported — skip silently
+    }
+    // Open WhatsApp to this contact (image is now in clipboard — user just pastes)
+    const phone = player.phone!.replace(/\D/g, "");
+    window.open(`https://wa.me/${phone}`, "_blank");
+    setCopiedId(player.player_id);
+    setTimeout(() => setCopiedId(null), 4000);
+  }
 
   return (
     <div className="card p-4 mb-4">
-      <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
-        <span>💬</span> Send Results via WhatsApp
+      <h3 className="font-semibold text-sm mb-1" style={{ color: "var(--muted)" }}>
+        Share via WhatsApp
       </h3>
       <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
-        Tap to open WhatsApp with the results pre-filled
+        Tap a player — image is copied to clipboard, WhatsApp opens. Just paste.
       </p>
       <div className="space-y-2">
         {playersWithPhone.map((player) => {
           const pl = player.profit_loss_inr;
+          const copied = copiedId === player.player_id;
           return (
-            <a
+            <button
               key={player.player_id}
-              href={whatsappUrl(player.phone!, message)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-all"
+              onClick={() => sendTo(player)}
+              className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 transition-all"
               style={{
-                background: "rgba(37,211,102,0.08)",
-                border: "1px solid rgba(37,211,102,0.25)",
-                textDecoration: "none",
+                background: copied ? "rgba(37,211,102,0.18)" : "rgba(37,211,102,0.08)",
+                border: `1px solid ${copied ? "rgba(37,211,102,0.6)" : "rgba(37,211,102,0.25)"}`,
+                cursor: "pointer",
               }}
             >
               <div className="flex items-center gap-2">
-                <img
-                  src={avatarUrl(player.avatar)}
-                  alt={player.name}
-                  className="w-8 h-8 rounded-full flex-shrink-0"
-                />
-                <div>
+                <img src={avatarUrl(player.avatar)} alt={player.name} className="w-8 h-8 rounded-full flex-shrink-0" />
+                <div className="text-left">
                   <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
-                    {player.name}
-                    {player.is_banker && " 👑"}
+                    {player.name}{player.is_banker && " 👑"}
                   </p>
-                  <p className="text-xs" style={{ color: "var(--muted)" }}>
-                    {player.phone}
-                  </p>
+                  {copied ? (
+                    <p className="text-xs font-medium" style={{ color: "#25d366" }}>Copied! Paste in WhatsApp</p>
+                  ) : (
+                    <p className="text-xs" style={{ color: "var(--muted)" }}>{player.phone}</p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span
-                  className="text-sm font-bold"
-                  style={{ color: pl >= 0 ? "#27ae60" : "#e74c3c" }}
-                >
+                <span className="text-sm font-bold" style={{ color: pl >= 0 ? "#27ae60" : "#e74c3c" }}>
                   {pl >= 0 ? "+" : ""}₹{pl.toFixed(0)}
                 </span>
-                <span className="text-lg">↗</span>
+                <span className="text-base" style={{ color: "#25d366" }}>{copied ? "✓" : "↗"}</span>
               </div>
-            </a>
+            </button>
           );
         })}
       </div>

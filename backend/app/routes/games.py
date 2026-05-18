@@ -168,6 +168,17 @@ def get_results(game: models.Game = Depends(require_passcode)):
     return _build_results(game)
 
 
+@router.get("/{game_id}/public-results", response_model=schemas.GameResults)
+def get_public_results(game_id: int, db: Session = Depends(get_db)):
+    """Passcode-free results — only available once game is ended (for image card generation)."""
+    game = db.query(models.Game).filter(models.Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if game.status != "ended":
+        raise HTTPException(status_code=403, detail="Results not available yet")
+    return _build_results(game)
+
+
 def _build_results(game: models.Game) -> schemas.GameResults:
     chip_value = game.buy_in_amount / game.chips_per_buyin
     players = []
