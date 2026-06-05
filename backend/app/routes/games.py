@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
 from sqlalchemy.orm import Session
 import bcrypt
 import os
-import base64
 import json
 import re
-import google.generativeai as genai
+import base64
+import httpx
 from .. import models, schemas
 from ..database import get_db
 
@@ -192,29 +192,65 @@ async def count_chips(game_id: int, image: UploadFile = File(...)):
         raise HTTPException(status_code=503, detail="Chip counting not configured")
 
     image_bytes = await image.read()
-    b64 = base64.b64encode(image_bytes).decode()
     mime = image.content_type or "image/jpeg"
-
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    b64_image = base64.b64encode(image_bytes).decode()
+    print(f"[count-chips] received file: mime={mime} size={len(image_bytes)} bytes", flush=True)
 
     prompt = (
-        "Count the poker chips in this image. "
-        "The chip colours and values are: Black=100, Green=50, Red=20, White=10, Blue=5. "
-        "Count every chip of each colour you can see. "
-        "Return ONLY a JSON object in this exact format with no extra text:\n"
+        "You are an expert at counting poker chips from photos.\n\n"
+        "CHIP COLOURS AND VALUES:\n"
+        "- Black chips = 100\n"
+        "- Green chips = 50\n"
+        "- Red chips = 20\n"
+        "- White/grey chips = 10\n"
+        "- Blue chips = 5\n\n"
+        "INSTRUCTIONS:\n"
+        "1. Count EVERY chip visible, including stacked chips (count each chip in a stack individually).\n"
+        "2. For stacked chips, estimate the number of chips in the stack from the height.\n"
+        "3. Identify chip colour by the dominant colour of the chip body, not the edge markings.\n"
+        "4. If a colour is not present return 0.\n"
+        "5. Double-check your count before responding.\n\n"
+        "Respond with ONLY a raw JSON object — no markdown, no explanation, no code blocks:\n"
         '{"black": 0, "green": 0, "red": 0, "white": 0, "blue": 0}'
     )
 
-    response = model.generate_content([
-        prompt,
-        {"inline_data": {"mime_type": mime, "data": b64}},
-    ])
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {"inline_data": {"mime_type": mime, "data": b64_image}},
+            ]
+        }],
+        "generationConfig": {
+        "temperature": 1,
+        "thinkingConfig": {"thinkingBudget": 1024},
+    },
+    }
 
-    text = response.text.strip()
-    match = re.search(r'\{[^}]+\}', text, re.DOTALL)
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+
+    async with httpx.AsyncClient(timeout=30) as http:
+        resp = await http.post(url, params={"key": api_key}, json=payload)
+
+    if resp.status_code != 200:
+        print(f"[count-chips] Gemini error {resp.status_code}: {resp.text[:400]}", flush=True)
+        raise HTTPException(status_code=502, detail=f"Gemini API error {resp.status_code}: {resp.text[:300]}")
+
+    data = resp.json()
+    candidates = data.get("candidates", [])
+    if not candidates:
+        raise HTTPException(status_code=422, detail=f"No candidates in response: {str(data)[:200]}")
+
+    parts = candidates[0].get("content", {}).get("parts", [])
+    if not parts:
+        raise HTTPException(status_code=422, detail=f"No parts in candidate: {str(candidates[0])[:200]}")
+
+    text = parts[0].get("text", "").strip()
+    print(f"[count-chips] model raw response: {repr(text)}", flush=True)
+
+    match = re.search(r'\{.*?\}', text, re.DOTALL)
     if not match:
-        raise HTTPException(status_code=422, detail="Could not parse chip counts from image")
+        raise HTTPException(status_code=422, detail=f"Could not parse chip counts. Model said: {text[:200]}")
 
     try:
         counts = json.loads(match.group())
