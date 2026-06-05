@@ -19,6 +19,7 @@ interface PlayerResult {
   name: string;
   is_banker: boolean;
   buy_in_count: number;
+  final_chips: number;
   profit_loss_inr: number;
 }
 
@@ -43,15 +44,9 @@ export async function GET(
     (a, b) => b.profit_loss_inr - a.profit_loss_inr
   );
 
-  const banker = results.players.find((p) => p.is_banker);
-  const settlements = results.players.filter(
-    (p) => !p.is_banker && p.profit_loss_inr > 0
-  );
-
   const W = 600;
   const PLAYER_H = 68;
-  const SETTLEMENT_H = settlements.length > 0 ? 44 + settlements.length * 36 : 0;
-  const H = 260 + sorted.length * PLAYER_H + SETTLEMENT_H + 72;
+  const H = 260 + sorted.length * PLAYER_H + 72;
 
   return new ImageResponse(
     (
@@ -280,54 +275,6 @@ export async function GET(
             );
           })}
         </div>
-
-        {/* Settlement */}
-        {settlements.length > 0 && banker && (
-          <div
-            style={{
-              marginTop: 16,
-              marginLeft: 24,
-              marginRight: 24,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(36,82,55,0.6)",
-              borderRadius: 12,
-              padding: "12px 16px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: 3,
-                color: "#7cb88a",
-                fontWeight: 700,
-                display: "flex",
-              }}
-            >
-              SETTLEMENT
-            </div>
-            {settlements.map((p) => (
-              <div
-                key={p.player_id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 14,
-                  color: "#e8f5e9",
-                }}
-              >
-                <span>
-                  {banker.name} pays {p.name}
-                </span>
-                <span style={{ color: "#2ecc71", fontWeight: 700 }}>
-                  Rs.{p.profit_loss_inr.toFixed(0)}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* Footer */}
         <div

@@ -49,11 +49,14 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const sorted = [...results.players].sort((a, b) => b.profit_loss_inr - a.profit_loss_inr);
   const winner = sorted[0];
 
-  // Settlement: banker pays winners, receives from losers (all accounted through buy-ins already)
-  // Banker's net = -(sum of all other players' profits)
+  // Settlement: banker collected buy-ins upfront, so at the end banker pays back
+  // each player's final chip value (buy-in paid ± profit/loss).
+  // Only show players who still have chips (i.e. banker owes them money).
+  const chipValue = results.buy_in_amount / results.chips_per_buyin;
   const settlements = results.players
-    .filter((p) => !p.is_banker && p.profit_loss_inr > 0)
-    .map((p) => ({ player: p, amount: p.profit_loss_inr }));
+    .filter((p) => !p.is_banker && p.final_chips > 0)
+    .map((p) => ({ player: p, amount: p.final_chips * chipValue }))
+    .sort((a, b) => b.amount - a.amount);
 
   return (
     <main className="min-h-screen px-4 py-8 max-w-lg mx-auto fade-in">
