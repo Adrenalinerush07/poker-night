@@ -1,6 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
 from sqlalchemy.orm import Session
 import bcrypt
+import os
+import base64
+import json
+import re
+import google.generativeai as genai
 from .. import models, schemas
 from ..database import get_db
 
@@ -177,6 +182,46 @@ def get_public_results(game_id: int, db: Session = Depends(get_db)):
     if game.status != "ended":
         raise HTTPException(status_code=403, detail="Results not available yet")
     return _build_results(game)
+
+
+@router.post("/{game_id}/count-chips")
+async def count_chips(game_id: int, image: UploadFile = File(...)):
+    """Use Gemini Vision to count chips by colour from an uploaded photo."""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Chip counting not configured")
+
+    image_bytes = await image.read()
+    b64 = base64.b64encode(image_bytes).decode()
+    mime = image.content_type or "image/jpeg"
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-2.0-flash")
+
+    prompt = (
+        "Count the poker chips in this image. "
+        "The chip colours and values are: Black=100, Green=50, Red=20, White=10, Blue=5. "
+        "Count every chip of each colour you can see. "
+        "Return ONLY a JSON object in this exact format with no extra text:\n"
+        '{"black": 0, "green": 0, "red": 0, "white": 0, "blue": 0}'
+    )
+
+    response = model.generate_content([
+        prompt,
+        {"inline_data": {"mime_type": mime, "data": b64}},
+    ])
+
+    text = response.text.strip()
+    match = re.search(r'\{[^}]+\}', text, re.DOTALL)
+    if not match:
+        raise HTTPException(status_code=422, detail="Could not parse chip counts from image")
+
+    try:
+        counts = json.loads(match.group())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Invalid JSON from vision model")
+
+    return {k: max(0, int(counts.get(k, 0))) for k in ("black", "green", "red", "white", "blue")}
 
 
 def _build_results(game: models.Game) -> schemas.GameResults:

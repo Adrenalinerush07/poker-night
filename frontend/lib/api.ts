@@ -101,4 +101,15 @@ export const api = {
 
   getResults: (gameId: number, passcode: string) =>
     request<GameResults>(`/games/${gameId}/results`, {}, passcode),
+
+  countChips: async (gameId: number, imageFile: File): Promise<Record<string, number>> => {
+    const form = new FormData();
+    form.append("image", imageFile);
+    const res = await fetch(`${API}/games/${gameId}/count-chips`, { method: "POST", body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to count chips");
+    }
+    return res.json();
+  },
 };

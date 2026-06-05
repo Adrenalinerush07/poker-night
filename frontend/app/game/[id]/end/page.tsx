@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, Game } from "@/lib/api";
 import { avatarUrl } from "@/lib/avatars";
@@ -51,6 +51,7 @@ export default function EndGamePage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [scanning, setScanning] = useState<number | null>(null); // playerId being scanned
 
   useEffect(() => {
     const saved = getPasscode(gameId);
@@ -94,6 +95,27 @@ export default function EndGamePage({ params }: { params: Promise<{ id: string }
       ...prev,
       [playerId]: { ...prev[playerId], [denom]: value },
     }));
+  };
+
+  const handleScan = async (playerId: number, file: File) => {
+    setScanning(playerId);
+    try {
+      const counts = await api.countChips(gameId, file);
+      setChips((prev) => ({
+        ...prev,
+        [playerId]: {
+          black: String(counts.black ?? 0),
+          green: String(counts.green ?? 0),
+          red:   String(counts.red   ?? 0),
+          white: String(counts.white ?? 0),
+          blue:  String(counts.blue  ?? 0),
+        },
+      }));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to scan chips");
+    } finally {
+      setScanning(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -186,6 +208,37 @@ export default function EndGamePage({ params }: { params: Promise<{ id: string }
                     {player.buy_ins.length}× buy-in · {chipsInvested.toLocaleString()} chips in
                   </span>
                 </div>
+                {/* Camera scan button */}
+                <label
+                  style={{
+                    cursor: scanning === player.id ? "not-allowed" : "pointer",
+                    opacity: scanning !== null && scanning !== player.id ? 0.4 : 1,
+                    background: "rgba(212,175,55,0.12)",
+                    border: "1px solid rgba(212,175,55,0.3)",
+                    borderRadius: 8,
+                    padding: "6px 8px",
+                    fontSize: 18,
+                    lineHeight: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  title="Scan chips with camera"
+                >
+                  {scanning === player.id ? "⏳" : "📷"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: "none" }}
+                    disabled={scanning !== null}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleScan(player.id, file);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
                 {/* Live total + P&L */}
                 <div className="text-right flex-shrink-0">
                   <div className="text-sm font-bold text-gold">
