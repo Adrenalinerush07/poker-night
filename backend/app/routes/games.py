@@ -196,7 +196,7 @@ async def count_chips(game_id: int, image: UploadFile = File(...)):
     mime = image.content_type or "image/jpeg"
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     prompt = (
         "Count the poker chips in this image. "
