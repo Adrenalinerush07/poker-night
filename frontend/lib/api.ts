@@ -7,6 +7,11 @@ export interface PlayerCreate {
   phone?: string;
 }
 
+export interface PlayerJoinCreate {
+  name: string;
+  phone: string;
+}
+
 export interface GameCreate {
   buy_in_amount: number;
   chips_per_buyin: number;
@@ -85,6 +90,9 @@ export const api = {
   // All below require passcode header
   getGame: (id: number, passcode: string) =>
     request<Game>(`/games/${id}`, {}, passcode),
+
+  addPlayer: (gameId: number, data: PlayerJoinCreate, passcode: string) =>
+    request<Player>(`/games/${gameId}/players`, { method: "POST", body: JSON.stringify(data) }, passcode),
 
   addBuyIn: (gameId: number, playerId: number, passcode: string) =>
     request<Player>(`/games/${gameId}/players/${playerId}/buyin`, { method: "POST" }, passcode),

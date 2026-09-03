@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -8,6 +8,13 @@ class PlayerCreate(BaseModel):
     avatar: str
     is_banker: bool = False
     phone: Optional[str] = None
+
+
+class PlayerJoinCreate(BaseModel):
+    """A player joining an already active table receives one initial buy-in."""
+
+    name: str = Field(min_length=1, max_length=20)
+    phone: str = Field(min_length=1, max_length=30)
 
 
 class GameCreate(BaseModel):

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api, Game, Player } from "@/lib/api";
 import { avatarUrl } from "@/lib/avatars";
@@ -17,6 +17,8 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
   const [loading, setLoading] = useState(true);
   const [actionPlayer, setActionPlayer] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [addPlayerDialogOpen, setAddPlayerDialogOpen] = useState(false);
+  const [addingPlayer, setAddingPlayer] = useState(false);
 
   // On mount, check sessionStorage for a saved passcode
   useEffect(() => {
@@ -69,6 +71,21 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
       setError(e instanceof Error ? e.message : "Cannot remove buy-in");
     } finally {
       setActionPlayer(null);
+    }
+  };
+
+  const handleAddPlayer = async (name: string, phone: string) => {
+    if (!game || !passcode || addingPlayer) return;
+    setAddingPlayer(true);
+    setError("");
+    try {
+      const player = await api.addPlayer(game.id, { name, phone }, passcode);
+      setGame((prev) => prev ? { ...prev, players: [...prev.players, player] } : prev);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to add player");
+      throw e;
+    } finally {
+      setAddingPlayer(false);
     }
   };
 
@@ -148,6 +165,35 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
         actionPlayer={actionPlayer}
       />
 
+      <div className="absolute bottom-8 left-5 z-30">
+        <button
+          onClick={() => setAddPlayerDialogOpen(true)}
+          disabled={addingPlayer}
+          className="flex items-center gap-2 px-4 py-3 rounded-full font-semibold text-sm"
+          style={{
+            background: "rgba(39,174,96,0.9)",
+            border: "1px solid rgba(39,174,96,0.65)",
+            color: "white",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+          }}
+        >
+          <span>＋</span> Add player
+        </button>
+      </div>
+
+      {addPlayerDialogOpen && (
+        <AddPlayerDialog
+          buyInAmount={game.buy_in_amount}
+          submitting={addingPlayer}
+          onClose={() => setAddPlayerDialogOpen(false)}
+          onSubmit={async (name, phone) => {
+            await handleAddPlayer(name, phone);
+            setAddPlayerDialogOpen(false);
+          }}
+        />
+      )}
+
       {/* End game pill */}
       <div className="absolute bottom-8 left-1/2 z-30" style={{ transform: "translateX(-50%)" }}>
         <button
@@ -165,6 +211,70 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
           <span>🏁</span> End Game &amp; Count Chips
         </button>
       </div>
+    </div>
+  );
+}
+
+function AddPlayerDialog({
+  buyInAmount, submitting, onClose, onSubmit,
+}: {
+  buyInAmount: number;
+  submitting: boolean;
+  onClose: () => void;
+  onSubmit: (name: string, phone: string) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim() || !phone.trim()) {
+      setError("Enter the player's name and phone number.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSubmit(name.trim(), phone.trim());
+    } catch {
+      setError("Could not add the player. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center p-5"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+    >
+      <form
+        onSubmit={submit}
+        className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+        style={{ background: "#152b1e", border: "1px solid var(--border)", boxShadow: "0 12px 36px rgba(0,0,0,0.55)" }}
+      >
+        <div>
+          <h2 className="font-bold text-lg text-gold">Add player</h2>
+          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+            They will join with one ₹{buyInAmount.toLocaleString()} buy-in at this table's current rate.
+          </p>
+        </div>
+        <label className="block text-sm" style={{ color: "var(--muted)" }}>
+          Name
+          <input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={20} className="mt-1" placeholder="Player name" />
+        </label>
+        <label className="block text-sm" style={{ color: "var(--muted)" }}>
+          Phone number
+          <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={30} className="mt-1" placeholder="Phone number" />
+        </label>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <div className="flex gap-3 pt-1">
+          <button type="button" onClick={onClose} disabled={saving || submitting} className="btn btn-ghost flex-1">Cancel</button>
+          <button type="submit" disabled={saving || submitting} className="btn btn-gold flex-1">{saving || submitting ? "Adding…" : "Add to table"}</button>
+        </div>
+      </form>
     </div>
   );
 }

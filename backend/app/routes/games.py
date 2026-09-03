@@ -88,6 +88,40 @@ def get_game(game: models.Game = Depends(require_passcode)):
     return game
 
 
+@router.post("/{game_id}/players", response_model=schemas.PlayerOut)
+def add_player(
+    payload: schemas.PlayerJoinCreate,
+    game: models.Game = Depends(require_passcode),
+    db: Session = Depends(get_db),
+):
+    """Seat a late-arriving player with the table's standard initial buy-in."""
+    if game.status == "ended":
+        raise HTTPException(status_code=400, detail="Game has already ended")
+
+    name = payload.name.strip()
+    phone = payload.phone.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Player name is required")
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone number is required")
+
+    player = models.Player(
+        game_id=game.id,
+        name=name,
+        phone=phone,
+        # DiceBear uses the seed for a deterministic avatar, so no client-side
+        # avatar selection is needed when someone joins a live table.
+        avatar=f"joined-{game.id}-{name.lower()}",
+        is_banker=False,
+    )
+    db.add(player)
+    db.flush()
+    db.add(models.BuyIn(player_id=player.id, game_id=game.id))
+    db.commit()
+    db.refresh(player)
+    return player
+
+
 @router.post("/{game_id}/players/{player_id}/buyin", response_model=schemas.PlayerOut)
 def add_buyin(
     player_id: int,
