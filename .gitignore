@@ -30,3 +30,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Local deployment credentials
+.gh-auth/
+.github-deploy-key
+.github-deploy-key.pub
+.github-known-hosts
