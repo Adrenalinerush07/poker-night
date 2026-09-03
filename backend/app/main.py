@@ -19,6 +19,22 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE players ADD COLUMN phone VARCHAR"))
         conn.commit()
 
+# Each buy-in now carries its own money and chip values. Existing games used the
+# table's standard buy-in, so safely backfill their historical records.
+with engine.connect() as conn:
+    cols = [c["name"] for c in inspect(engine).get_columns("buy_ins")]
+    if "amount" not in cols:
+        conn.execute(text("ALTER TABLE buy_ins ADD COLUMN amount DOUBLE PRECISION"))
+    if "chips" not in cols:
+        conn.execute(text("ALTER TABLE buy_ins ADD COLUMN chips INTEGER"))
+    conn.execute(text("""
+        UPDATE buy_ins
+        SET amount = (SELECT buy_in_amount FROM games WHERE games.id = buy_ins.game_id),
+            chips = (SELECT chips_per_buyin FROM games WHERE games.id = buy_ins.game_id)
+        WHERE amount IS NULL OR chips IS NULL
+    """))
+    conn.commit()
+
 app = FastAPI(title="Poker Night API")
 
 app.add_middleware(

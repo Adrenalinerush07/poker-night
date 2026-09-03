@@ -17,6 +17,10 @@ class PlayerJoinCreate(BaseModel):
     phone: str = Field(min_length=1, max_length=30)
 
 
+class BuyInCreate(BaseModel):
+    amount: float = Field(gt=0)
+
+
 class GameCreate(BaseModel):
     buy_in_amount: float
     chips_per_buyin: int
@@ -31,6 +35,8 @@ class PasscodeVerify(BaseModel):
 class BuyInOut(BaseModel):
     id: int
     player_id: int
+    amount: float
+    chips: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -75,6 +81,7 @@ class PlayerResult(BaseModel):
     is_banker: bool
     phone: Optional[str] = None
     buy_in_count: int
+    amount_invested: float
     chips_invested: int
     final_chips: int
     profit_loss_chips: int

@@ -22,6 +22,8 @@ export interface GameCreate {
 export interface BuyIn {
   id: number;
   player_id: number;
+  amount: number;
+  chips: number;
   created_at: string;
 }
 
@@ -50,6 +52,7 @@ export interface PlayerResult {
   is_banker: boolean;
   phone?: string | null;
   buy_in_count: number;
+  amount_invested: number;
   chips_invested: number;
   final_chips: number;
   profit_loss_chips: number;
@@ -94,8 +97,12 @@ export const api = {
   addPlayer: (gameId: number, data: PlayerJoinCreate, passcode: string) =>
     request<Player>(`/games/${gameId}/players`, { method: "POST", body: JSON.stringify(data) }, passcode),
 
-  addBuyIn: (gameId: number, playerId: number, passcode: string) =>
-    request<Player>(`/games/${gameId}/players/${playerId}/buyin`, { method: "POST" }, passcode),
+  addBuyIn: (gameId: number, playerId: number, passcode: string, amount?: number) =>
+    request<Player>(
+      `/games/${gameId}/players/${playerId}/buyin`,
+      { method: "POST", body: amount === undefined ? undefined : JSON.stringify({ amount }) },
+      passcode,
+    ),
 
   removeBuyIn: (gameId: number, playerId: number, passcode: string) =>
     request<Player>(`/games/${gameId}/players/${playerId}/buyin`, { method: "DELETE" }, passcode),

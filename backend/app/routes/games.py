@@ -66,7 +66,12 @@ def create_game(payload: schemas.GameCreate, db: Session = Depends(get_db)):
         )
         db.add(player)
         db.flush()
-        db.add(models.BuyIn(player_id=player.id, game_id=game.id))
+        db.add(models.BuyIn(
+            player_id=player.id,
+            game_id=game.id,
+            amount=game.buy_in_amount,
+            chips=game.chips_per_buyin,
+        ))
 
     db.commit()
     db.refresh(game)
@@ -116,7 +121,12 @@ def add_player(
     )
     db.add(player)
     db.flush()
-    db.add(models.BuyIn(player_id=player.id, game_id=game.id))
+    db.add(models.BuyIn(
+        player_id=player.id,
+        game_id=game.id,
+        amount=game.buy_in_amount,
+        chips=game.chips_per_buyin,
+    ))
     db.commit()
     db.refresh(player)
     return player
@@ -125,6 +135,7 @@ def add_player(
 @router.post("/{game_id}/players/{player_id}/buyin", response_model=schemas.PlayerOut)
 def add_buyin(
     player_id: int,
+    payload: schemas.BuyInCreate | None = None,
     game: models.Game = Depends(require_passcode),
     db: Session = Depends(get_db),
 ):
@@ -138,7 +149,23 @@ def add_buyin(
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    db.add(models.BuyIn(player_id=player_id, game_id=game.id))
+    # The initial buy-in happens when the player is seated. Their second
+    # buy-in is always the table's standard amount. From the third onward,
+    # the host chooses the amount and receives chips at the original rate.
+    if len(player.buy_ins) < 2:
+        amount = game.buy_in_amount
+        chips = game.chips_per_buyin
+    else:
+        if payload is None:
+            raise HTTPException(status_code=400, detail="Enter an amount for the third and later buy-ins")
+        amount = payload.amount
+        # Match the client preview: half a chip rounds up because only whole
+        # poker chips can be issued.
+        chips = int(amount * game.chips_per_buyin / game.buy_in_amount + 0.5)
+        if chips <= 0:
+            raise HTTPException(status_code=400, detail="Amount is too small for this table's chip rate")
+
+    db.add(models.BuyIn(player_id=player_id, game_id=game.id, amount=amount, chips=chips))
     db.commit()
     db.refresh(player)
     return player
@@ -185,7 +212,7 @@ def end_game(
             raise HTTPException(status_code=400, detail=f"Missing final chips for player {player.name}")
         player.final_chips = chips_map[player.id]
 
-    total_distributed = sum(len(p.buy_ins) * game.chips_per_buyin for p in game.players)
+    total_distributed = sum(sum(buy_in.chips for buy_in in p.buy_ins) for p in game.players)
     total_counted = sum(chips_map[p.id] for p in game.players)
     if total_counted != total_distributed:
         diff = total_counted - total_distributed
@@ -300,10 +327,11 @@ def _build_results(game: models.Game) -> schemas.GameResults:
 
     for player in game.players:
         buy_in_count = len(player.buy_ins)
-        chips_invested = buy_in_count * game.chips_per_buyin
+        amount_invested = sum(buy_in.amount for buy_in in player.buy_ins)
+        chips_invested = sum(buy_in.chips for buy_in in player.buy_ins)
         final = player.final_chips or 0
         profit_loss_chips = final - chips_invested
-        profit_loss_inr = round(profit_loss_chips * chip_value, 2)
+        profit_loss_inr = round(final * chip_value - amount_invested, 2)
 
         players.append(schemas.PlayerResult(
             player_id=player.id,
@@ -312,6 +340,7 @@ def _build_results(game: models.Game) -> schemas.GameResults:
             is_banker=player.is_banker,
             phone=player.phone,
             buy_in_count=buy_in_count,
+            amount_invested=amount_invested,
             chips_invested=chips_invested,
             final_chips=final,
             profit_loss_chips=profit_loss_chips,

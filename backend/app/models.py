@@ -44,6 +44,8 @@ class BuyIn(Base):
     id = Column(Integer, primary_key=True, index=True)
     player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
     game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    chips = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     player = relationship("Player", back_populates="buy_ins")

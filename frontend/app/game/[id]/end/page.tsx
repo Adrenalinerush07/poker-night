@@ -83,7 +83,7 @@ export default function EndGamePage({ params }: { params: Promise<{ id: string }
 
   const chipValue = game.buy_in_amount / game.chips_per_buyin;
   const totalDistributed = game.players.reduce(
-    (sum, p) => sum + p.buy_ins.length * game.chips_per_buyin, 0
+    (sum, p) => sum + p.buy_ins.reduce((chips, buyIn) => chips + buyIn.chips, 0), 0
   );
   const totalCounted = game.players.reduce((sum, p) => sum + calcTotal(chips[p.id] ?? emptyChipCounts()), 0);
   const allFilled = game.players.every((p) => isComplete(chips[p.id] ?? emptyChipCounts()));
@@ -182,9 +182,10 @@ export default function EndGamePage({ params }: { params: Promise<{ id: string }
         {game.players.map((player) => {
           const counts = chips[player.id] ?? emptyChipCounts();
           const total = calcTotal(counts);
-          const chipsInvested = player.buy_ins.length * game.chips_per_buyin;
+          const chipsInvested = player.buy_ins.reduce((sum, buyIn) => sum + buyIn.chips, 0);
+          const amountInvested = player.buy_ins.reduce((sum, buyIn) => sum + buyIn.amount, 0);
           const delta = isComplete(counts) ? total - chipsInvested : null;
-          const inr = delta !== null ? delta * chipValue : null;
+          const inr = delta !== null ? total * chipValue - amountInvested : null;
 
           return (
             <div key={player.id} className="card overflow-hidden">

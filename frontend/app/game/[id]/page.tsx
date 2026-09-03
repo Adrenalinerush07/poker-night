@@ -19,6 +19,7 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
   const [error, setError] = useState("");
   const [addPlayerDialogOpen, setAddPlayerDialogOpen] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);
+  const [customBuyInPlayer, setCustomBuyInPlayer] = useState<Player | null>(null);
 
   // On mount, check sessionStorage for a saved passcode
   useEffect(() => {
@@ -52,11 +53,29 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
 
   const handleBuyIn = async (player: Player) => {
     if (!game || !passcode || actionPlayer !== null) return;
+    if (player.buy_ins.length >= 2) {
+      setCustomBuyInPlayer(player);
+      return;
+    }
     setActionPlayer(player.id);
     try {
       updatePlayer(await api.addBuyIn(game.id, player.id, passcode));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to add buy-in");
+    } finally {
+      setActionPlayer(null);
+    }
+  };
+
+  const handleCustomBuyIn = async (player: Player, amount: number) => {
+    if (!game || !passcode || actionPlayer !== null) return;
+    setActionPlayer(player.id);
+    try {
+      updatePlayer(await api.addBuyIn(game.id, player.id, passcode, amount));
+      setCustomBuyInPlayer(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to add buy-in");
+      throw e;
     } finally {
       setActionPlayer(null);
     }
@@ -194,6 +213,16 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
         />
       )}
 
+      {customBuyInPlayer && (
+        <CustomBuyInDialog
+          player={customBuyInPlayer}
+          game={game}
+          submitting={actionPlayer === customBuyInPlayer.id}
+          onClose={() => setCustomBuyInPlayer(null)}
+          onSubmit={(amount) => handleCustomBuyIn(customBuyInPlayer, amount)}
+        />
+      )}
+
       {/* End game pill */}
       <div className="absolute bottom-8 left-1/2 z-30" style={{ transform: "translateX(-50%)" }}>
         <button
@@ -211,6 +240,84 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
           <span>🏁</span> End Game &amp; Count Chips
         </button>
       </div>
+    </div>
+  );
+}
+
+function CustomBuyInDialog({
+  player, game, submitting, onClose, onSubmit,
+}: {
+  player: Player;
+  game: Game;
+  submitting: boolean;
+  onClose: () => void;
+  onSubmit: (amount: number) => Promise<void>;
+}) {
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const numericAmount = Number(amount);
+  const chips = Number.isFinite(numericAmount) && numericAmount > 0
+    ? Math.round(numericAmount * game.chips_per_buyin / game.buy_in_amount)
+    : 0;
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || chips <= 0) {
+      setError("Enter a valid buy-in amount.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSubmit(numericAmount);
+    } catch {
+      setError("Could not add the buy-in. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center p-5"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+    >
+      <form
+        onSubmit={submit}
+        className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+        style={{ background: "#152b1e", border: "1px solid var(--border)", boxShadow: "0 12px 36px rgba(0,0,0,0.55)" }}
+      >
+        <div>
+          <h2 className="font-bold text-lg text-gold">Custom buy-in</h2>
+          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+            {player.name}&apos;s third and later buy-ins use the game&apos;s original rate.
+          </p>
+        </div>
+        <label className="block text-sm" style={{ color: "var(--muted)" }}>
+          Amount (₹)
+          <input
+            autoFocus
+            type="number"
+            min="1"
+            step="1"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            className="mt-1"
+            placeholder={`e.g. ${game.buy_in_amount}`}
+          />
+        </label>
+        {chips > 0 && (
+          <div className="rounded-lg p-3 text-sm" style={{ background: "var(--felt)", color: "var(--muted)" }}>
+            ₹{numericAmount.toLocaleString()} gives {chips.toLocaleString()} chips
+          </div>
+        )}
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <div className="flex gap-3 pt-1">
+          <button type="button" onClick={onClose} disabled={saving || submitting} className="btn btn-ghost flex-1">Cancel</button>
+          <button type="submit" disabled={saving || submitting} className="btn btn-gold flex-1">{saving || submitting ? "Adding…" : "Add buy-in"}</button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -329,6 +436,7 @@ function PokerTable({
       {players.map((player, i) => {
         const pos = positions[i];
         const buyInCount = player.buy_ins.length;
+        const totalInvested = player.buy_ins.reduce((sum, buyIn) => sum + buyIn.amount, 0);
         return (
           <div
             key={player.id}
@@ -338,7 +446,7 @@ function PokerTable({
             <PlayerCard
               player={player}
               buyInCount={buyInCount}
-              totalInvested={buyInCount * game.buy_in_amount}
+              totalInvested={totalInvested}
               onBuyIn={() => onBuyIn(player)}
               onRemoveBuyIn={() => onRemoveBuyIn(player)}
               loading={actionPlayer === player.id}
@@ -405,7 +513,7 @@ function PlayerCard({
             color: "white", border: "none", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
           }}
         >
-          {loading ? "…" : `+1  ×${buyInCount}`}
+          {loading ? "…" : buyInCount >= 2 ? "Custom +" : `+1  ×${buyInCount}`}
         </button>
       </div>
     </div>
