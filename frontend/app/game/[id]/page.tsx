@@ -144,9 +144,9 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
         }}
       />
 
-      {/* Floating info pill */}
+      {/* Compact header leaves room for the table on small screens. */}
       <div
-        className="absolute top-4 left-1/2 z-30 flex items-center gap-3 px-4 py-2 rounded-full"
+        className="absolute top-3 left-1/2 z-30 flex max-w-[calc(100%-24px)] items-center gap-2 rounded-full px-3 py-2 sm:top-4 sm:gap-3 sm:px-4"
         style={{
           transform: "translateX(-50%)",
           background: "rgba(21,43,30,0.9)",
@@ -160,8 +160,8 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
         <span className="text-xs" style={{ color: "var(--muted)" }}>
           ₹{game.buy_in_amount} / {game.chips_per_buyin} chips
         </span>
-        <span style={{ color: "var(--border)" }}>·</span>
-        <span className="text-xs" style={{ color: "var(--muted)" }}>👑 {banker?.name}</span>
+        <span className="hidden sm:inline" style={{ color: "var(--border)" }}>·</span>
+        <span className="hidden text-xs sm:inline" style={{ color: "var(--muted)" }}>👑 {banker?.name}</span>
       </div>
 
       {error && (
@@ -184,11 +184,12 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
         actionPlayer={actionPlayer}
       />
 
-      <div className="absolute bottom-8 left-5 z-30">
+      {/* A single bottom dock prevents primary actions from colliding on phones. */}
+      <div className="absolute inset-x-3 bottom-3 z-30 flex gap-2 sm:inset-x-auto sm:bottom-8 sm:left-5">
         <button
           onClick={() => setAddPlayerDialogOpen(true)}
           disabled={addingPlayer}
-          className="flex items-center gap-2 px-4 py-3 rounded-full font-semibold text-sm"
+          className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold sm:flex-none sm:rounded-full sm:px-4"
           style={{
             background: "rgba(39,174,96,0.9)",
             border: "1px solid rgba(39,174,96,0.65)",
@@ -198,6 +199,20 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
           }}
         >
           <span>＋</span> Add player
+        </button>
+        <button
+          onClick={() => router.push(`/game/${id}/end`)}
+          className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold sm:flex-none sm:rounded-full sm:px-6"
+          style={{
+            background: "rgba(192,57,43,0.85)",
+            border: "1px solid rgba(192,57,43,0.6)",
+            color: "white",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span>🏁</span><span className="sm:hidden">End game</span><span className="hidden sm:inline">End Game &amp; Count Chips</span>
         </button>
       </div>
 
@@ -222,24 +237,6 @@ export default function GamePage({ params }: { params: Promise<{ id: string }> }
           onSubmit={(amount) => handleCustomBuyIn(customBuyInPlayer, amount)}
         />
       )}
-
-      {/* End game pill */}
-      <div className="absolute bottom-8 left-1/2 z-30" style={{ transform: "translateX(-50%)" }}>
-        <button
-          onClick={() => router.push(`/game/${id}/end`)}
-          className="flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-sm"
-          style={{
-            background: "rgba(192,57,43,0.85)",
-            border: "1px solid rgba(192,57,43,0.6)",
-            color: "white",
-            backdropFilter: "blur(8px)",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          <span>🏁</span> End Game &amp; Count Chips
-        </button>
-      </div>
     </div>
   );
 }
@@ -399,13 +396,13 @@ function PokerTable({
 
   const positions = players.map((_, i) => {
     const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
-    return { x: 50 + 40 * Math.cos(angle), y: 50 + 33 * Math.sin(angle) };
+    return { x: 50 + 40 * Math.cos(angle), y: 50 + 35 * Math.sin(angle) };
   });
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center">
+    <div className="absolute inset-x-0 top-[72px] bottom-[76px] flex items-center justify-center sm:inset-0">
       {/* Oval table */}
-      <div className="relative flex-shrink-0" style={{ width: "min(62vw, 260px)", aspectRatio: "16/10" }}>
+      <div className="relative w-[76vw] max-w-[360px] flex-shrink-0 sm:w-[62vw] sm:max-w-[300px]" style={{ aspectRatio: "16/10" }}>
         <div
           className="absolute inset-0 rounded-[50%]"
           style={{
@@ -470,9 +467,8 @@ function PlayerCard({
 }) {
   return (
     <div
-      className="flex flex-col items-center gap-1 rounded-xl px-2 py-2"
+      className="flex w-[66px] flex-col items-center gap-1 rounded-xl px-2 py-2 sm:w-[72px]"
       style={{
-        width: 72,
         background: "rgba(15,34,24,0.75)",
         border: `1px solid ${player.is_banker ? "rgba(212,175,55,0.5)" : "rgba(36,82,55,0.6)"}`,
         backdropFilter: "blur(6px)",
