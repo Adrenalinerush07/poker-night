@@ -12,7 +12,7 @@ const DENOMINATIONS = [
   { key: "green", label: "Green", value: 50,  color: "#1e7a3e", border: "#27ae60" },
   { key: "red",   label: "Red",   value: 20,  color: "#922b21", border: "#e74c3c" },
   { key: "white", label: "White", value: 10,  color: "#c8c8c8", border: "#fff" },
-  { key: "blue",  label: "Blue",  value: 500, color: "#1a5fa8", border: "#3498db" },
+  { key: "blue",  label: "Blue",  value: 200, color: "#1a5fa8", border: "#3498db" },
 ] as const;
 
 type DenomKey = (typeof DENOMINATIONS)[number]["key"];
