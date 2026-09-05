@@ -264,7 +264,7 @@ async def count_chips(game_id: int, image: UploadFile = File(...)):
         "- Green chips = 50\n"
         "- Red chips = 20\n"
         "- White/grey chips = 10\n"
-        "- Blue chips = 200\n\n"
+        "- Blue chips = 5\n\n"
         "INSTRUCTIONS:\n"
         "1. Count EVERY chip visible, including stacked chips (count each chip in a stack individually).\n"
         "2. For stacked chips, estimate the number of chips in the stack from the height.\n"
