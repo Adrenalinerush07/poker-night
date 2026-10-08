@@ -66,6 +66,26 @@ export interface GameResults {
   players: PlayerResult[];
 }
 
+export interface LeaderboardPlayer {
+  name: string;
+  games_played: number;
+  wins: number;
+  losses: number;
+  breakeven: number;
+  net_winnings: number;
+  average_per_game: number;
+  win_rate: number;
+  experience_score: number;
+  overall_rank: number;
+  regular_rank: number | null;
+}
+
+export interface Leaderboard {
+  genuine_games: number;
+  minimum_games_for_regular_rank: number;
+  players: LeaderboardPlayer[];
+}
+
 async function request<T>(path: string, options?: RequestInit, passcode?: string): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (passcode) headers["x-game-passcode"] = passcode;
@@ -79,6 +99,7 @@ async function request<T>(path: string, options?: RequestInit, passcode?: string
 }
 
 export const api = {
+  getLeaderboard: () => request<Leaderboard>("/games/stats/leaderboard"),
   // No passcode needed — creates the game
   createGame: (data: GameCreate) =>
     request<Game>("/games", { method: "POST", body: JSON.stringify(data) }),

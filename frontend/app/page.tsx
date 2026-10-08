@@ -66,6 +66,13 @@ export default function Home() {
             Join Table →
           </button>
         </div>
+
+        <button
+          className="btn btn-ghost w-full"
+          onClick={() => router.push("/leaderboard")}
+        >
+          View Leaderboard →
+        </button>
       </div>
     </main>
   );

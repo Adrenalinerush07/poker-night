@@ -6,10 +6,29 @@ import json
 import re
 import base64
 import httpx
+from collections import defaultdict
+from datetime import timezone
+from zoneinfo import ZoneInfo
 from .. import models, schemas
 from ..database import get_db
 
 router = APIRouter(prefix="/games", tags=["games"])
+
+IST = ZoneInfo("Asia/Kolkata")
+CANONICAL_PLAYER_NAMES = {
+    "dhruv": "Dhruv",
+    "dhurv": "Dhruv",
+    "rishi": "Rishi",
+    "john wick": "Rishi",
+    "jestin": "Jestin",
+    "justin": "Jestin",
+}
+
+
+def _canonical_player_name(name: str) -> str:
+    """Keep known aliases together in the historical leaderboard."""
+    cleaned = name.strip()
+    return CANONICAL_PLAYER_NAMES.get(cleaned.lower(), cleaned)
 
 
 def _hash(passcode: str) -> str:
@@ -59,7 +78,7 @@ def create_game(payload: schemas.GameCreate, db: Session = Depends(get_db)):
     for p in payload.players:
         player = models.Player(
             game_id=game.id,
-            name=p.name,
+            name=_canonical_player_name(p.name),
             avatar=p.avatar,
             is_banker=p.is_banker,
             phone=p.phone or None,
@@ -103,7 +122,7 @@ def add_player(
     if game.status == "ended":
         raise HTTPException(status_code=400, detail="Game has already ended")
 
-    name = payload.name.strip()
+    name = _canonical_player_name(payload.name)
     phone = payload.phone.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Player name is required")
@@ -243,6 +262,84 @@ def get_public_results(game_id: int, db: Session = Depends(get_db)):
     if game.status != "ended":
         raise HTTPException(status_code=403, detail="Results not available yet")
     return _build_results(game)
+
+
+@router.get("/stats/leaderboard", response_model=schemas.LeaderboardOut)
+def get_leaderboard(db: Session = Depends(get_db)):
+    """Public all-time leaderboard, excluding extra same-day test games."""
+    ended_games = (
+        db.query(models.Game)
+        .filter(models.Game.status == models.GameStatus.ended)
+        .order_by(models.Game.created_at.desc(), models.Game.id.desc())
+        .all()
+    )
+
+    # Older testing sessions sometimes created several games in quick succession.
+    # Keep the latest two completed games per India calendar date.
+    games_per_day: dict[object, int] = defaultdict(int)
+    genuine_games = []
+    for game in ended_games:
+        created_at = game.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        day = created_at.astimezone(IST).date()
+        if games_per_day[day] < 2:
+            genuine_games.append(game)
+            games_per_day[day] += 1
+
+    stats: dict[str, dict] = {}
+    for game in genuine_games:
+        chip_value = game.buy_in_amount / game.chips_per_buyin
+        for player in game.players:
+            name = _canonical_player_name(player.name)
+            amount_invested = sum(buy_in.amount for buy_in in player.buy_ins)
+            pnl = (player.final_chips or 0) * chip_value - amount_invested
+            entry = stats.setdefault(name, {
+                "name": name, "games_played": 0, "wins": 0, "losses": 0,
+                "breakeven": 0, "net_winnings": 0.0,
+            })
+            entry["games_played"] += 1
+            entry["net_winnings"] += pnl
+            if pnl > 0:
+                entry["wins"] += 1
+            elif pnl < 0:
+                entry["losses"] += 1
+            else:
+                entry["breakeven"] += 1
+
+    players = []
+    for entry in stats.values():
+        games_played = entry["games_played"]
+        average_per_game = entry["net_winnings"] / games_played
+        # This moderates small samples: a one-game result counts as 25% of its
+        # average, while a long-running record increasingly reflects its average.
+        experience_score = average_per_game * games_played / (games_played + 3)
+        players.append({
+            **entry,
+            "net_winnings": round(entry["net_winnings"], 2),
+            "average_per_game": round(average_per_game, 2),
+            "win_rate": round(entry["wins"] * 100 / games_played, 1),
+            "experience_score": round(experience_score, 2),
+            "overall_rank": 0,
+            "regular_rank": None,
+        })
+
+    players.sort(key=lambda player: (-player["net_winnings"], -player["games_played"], player["name"]))
+    for index, player in enumerate(players, start=1):
+        player["overall_rank"] = index
+
+    regulars = sorted(
+        (player for player in players if player["games_played"] >= 3),
+        key=lambda player: (-player["experience_score"], -player["games_played"], player["name"]),
+    )
+    for index, player in enumerate(regulars, start=1):
+        player["regular_rank"] = index
+
+    return schemas.LeaderboardOut(
+        genuine_games=len(genuine_games),
+        minimum_games_for_regular_rank=3,
+        players=players,
+    )
 
 
 @router.post("/{game_id}/count-chips")
