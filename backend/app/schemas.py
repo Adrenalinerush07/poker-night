@@ -93,23 +93,3 @@ class GameResults(BaseModel):
     buy_in_amount: float
     chips_per_buyin: int
     players: list[PlayerResult]
-
-
-class LeaderboardPlayer(BaseModel):
-    name: str
-    games_played: int
-    wins: int
-    losses: int
-    breakeven: int
-    net_winnings: float
-    average_per_game: float
-    win_rate: float
-    experience_score: float
-    overall_rank: int
-    regular_rank: Optional[int] = None
-
-
-class LeaderboardOut(BaseModel):
-    genuine_games: int
-    minimum_games_for_regular_rank: int
-    players: list[LeaderboardPlayer]
